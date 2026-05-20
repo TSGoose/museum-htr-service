@@ -57,6 +57,7 @@ data/training/*
 models/**/__pycache__/
 models/**/*.tmp
 models/**/*.bak
+models/huggingface/*
 
 # Temporary files
 tmp/*
