@@ -54,8 +54,9 @@ data/training/*
 !data/training/.gitkeep
 
 # OCR / ML models
-models/*
-!models/.gitkeep
+models/**/__pycache__/
+models/**/*.tmp
+models/**/*.bak
 
 # Temporary files
 tmp/*
