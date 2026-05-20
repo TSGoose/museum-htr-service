@@ -1,0 +1,65 @@
+services:
+  ocr-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runtime
+      args:
+        INSTALL_OCR: ${INSTALL_OCR:-false}
+    container_name: museum-ocr-api
+    env_file:
+      - .env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./data/uploads:/app/data/uploads
+      - ./data/training:/app/data/training
+      - ./data/logs:/app/logs
+      - ./models:/app/models
+    depends_on:
+      - ocr-postgres
+      - ocr-redis
+
+  ocr-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runtime
+      args:
+        INSTALL_OCR: ${INSTALL_OCR:-false}
+    container_name: museum-ocr-worker
+    env_file:
+      - .env
+    command: dramatiq app.workers.tasks --processes 1 --threads 1
+    volumes:
+      - .:/app
+      - ./data/uploads:/app/data/uploads
+      - ./data/training:/app/data/training
+      - ./data/logs:/app/logs
+      - ./models:/app/models
+    depends_on:
+      - ocr-postgres
+      - ocr-redis
+
+  ocr-postgres:
+    image: postgres:16-alpine
+    container_name: museum-ocr-postgres
+    environment:
+      POSTGRES_DB: museum_ocr
+      POSTGRES_USER: museum_ocr
+      POSTGRES_PASSWORD: museum_ocr
+    ports:
+      - "5433:5432"
+    volumes:
+      - ocr-postgres-data:/var/lib/postgresql/data
+
+  ocr-redis:
+    image: redis:7-alpine
+    container_name: museum-ocr-redis
+    ports:
+      - "6380:6379"
+
+volumes:
+  ocr-postgres-data:

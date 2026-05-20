@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# uv
+uv.lock
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.coverage.xml
+junit.xml
+
+# Mypy / Ruff / Black
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+data/logs/*
+!data/logs/.gitkeep
+
+# Local runtime data
+data/uploads/*
+!data/uploads/.gitkeep
+
+data/training/*
+!data/training/.gitkeep
+
+# OCR / ML models
+models/*
+!models/.gitkeep
+
+# Temporary files
+tmp/*
+!tmp/.gitkeep
+*.tmp
+*.bak
+*.orig
+
+# Docker / local volumes
+docker-data/
+postgres-data/
+redis-data/
+
+# Alembic generated cache
+alembic/__pycache__/
+alembic/versions/__pycache__/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# Project-specific generated OCR artifacts
+**/line_crops/
+**/preprocessed/
