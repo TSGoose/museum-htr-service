@@ -37,22 +37,32 @@ class KrakenSegmenter:
         with Image.open(image_path) as img:
             rgb = img.convert("RGB")
             model = TorchVGSLModel.load_model(str(self.model_path))
-            segmentation = blla.segment(rgb, model=model, device="cpu")
+
+            try:
+                segmentation = blla.segment(rgb, model=model, device="cpu")
+            except TypeError:
+                segmentation = blla.segment(rgb, model=model)
 
             raw_lines = self._extract_raw_lines(segmentation)
-            lines: list[TextLine] = []
-            for index, raw_line in enumerate(raw_lines):
+
+            fragments: list[tuple[int, int, int, int]] = []
+            for raw_line in raw_lines:
                 polygon = self._extract_polygon(raw_line)
                 bbox = self._polygon_to_bbox(polygon, rgb.size)
+                fragments.append(bbox)
+
+            grouped_bboxes = self._group_fragments_into_lines(fragments)
+
+            lines: list[TextLine] = []
+            for index, bbox in enumerate(grouped_bboxes):
                 crop_path = self._save_crop(rgb, bbox, crop_dir, index)
-                baseline = self._extract_baseline(raw_line)
                 lines.append(
                     TextLine(
                         index=index,
                         bbox=bbox,
                         crop_path=crop_path,
-                        baseline=baseline,
-                        polygon=polygon,
+                        baseline=None,
+                        polygon=None,
                     )
                 )
 
@@ -63,6 +73,100 @@ class KrakenSegmenter:
 
             return lines
 
+    def _group_fragments_into_lines(
+        self,
+        fragments: list[tuple[int, int, int, int]],
+    ) -> list[tuple[int, int, int, int]]:
+        if not fragments:
+            return []
+
+        # Убираем слишком мелкий мусор.
+        cleaned: list[tuple[int, int, int, int]] = []
+        for x1, y1, x2, y2 in fragments:
+            width = x2 - x1
+            height = y2 - y1
+
+            if width < 10:
+                continue
+            if height < 10:
+                continue
+
+            cleaned.append((x1, y1, x2, y2))
+
+        if not cleaned:
+            return []
+
+        # Сортируем сверху вниз, потом слева направо.
+        cleaned.sort(key=lambda b: ((b[1] + b[3]) / 2, b[0]))
+
+        groups: list[list[tuple[int, int, int, int]]] = []
+
+        for bbox in cleaned:
+            x1, y1, x2, y2 = bbox
+            cy = (y1 + y2) / 2
+            height = y2 - y1
+
+            matched_group = None
+            best_distance = None
+
+            for group in groups:
+                group_y1 = min(b[1] for b in group)
+                group_y2 = max(b[3] for b in group)
+                group_cy = (group_y1 + group_y2) / 2
+                group_height = group_y2 - group_y1
+
+                tolerance = max(18, min(45, max(height, group_height) * 0.75))
+                distance = abs(cy - group_cy)
+
+                if distance <= tolerance:
+                    if best_distance is None or distance < best_distance:
+                        matched_group = group
+                        best_distance = distance
+
+            if matched_group is None:
+                groups.append([bbox])
+            else:
+                matched_group.append(bbox)
+
+        merged: list[tuple[int, int, int, int]] = []
+
+        for group in groups:
+            # Сортируем фрагменты внутри строки слева направо.
+            group.sort(key=lambda b: b[0])
+
+            x1 = min(b[0] for b in group)
+            y1 = min(b[1] for b in group)
+            x2 = max(b[2] for b in group)
+            y2 = max(b[3] for b in group)
+
+            width = x2 - x1
+            height = y2 - y1
+
+            # После группировки отбрасываем всё, что всё ещё не похоже на строку.
+            if width < 80:
+                continue
+            if height < 15:
+                continue
+            if width / max(height, 1) < 2.0:
+                continue
+
+            pad_x = 12
+            pad_y = 10
+
+            merged.append(
+                (
+                    max(0, x1 - pad_x),
+                    max(0, y1 - pad_y),
+                    x2 + pad_x,
+                    y2 + pad_y,
+                )
+            )
+
+        # Финальная сортировка строк сверху вниз.
+        merged.sort(key=lambda b: b[1])
+
+        return merged
+    
     def _extract_raw_lines(self, segmentation: Any) -> list[Any]:
         if isinstance(segmentation, dict):
             for key in ("lines", "text_lines", "line"):
@@ -149,6 +253,14 @@ class KrakenSegmenter:
         crop_dir: Path,
         index: int,
     ) -> Path:
+        width, height = image.size
+        x1, y1, x2, y2 = bbox
+
+        x1 = max(0, min(x1, width))
+        y1 = max(0, min(y1, height))
+        x2 = max(0, min(x2, width))
+        y2 = max(0, min(y2, height))
+
         crop_path = crop_dir / f"{index:04d}.jpg"
-        image.crop(bbox).save(crop_path, format="JPEG", quality=95)
+        image.crop((x1, y1, x2, y2)).save(crop_path, format="JPEG", quality=95)
         return crop_path
